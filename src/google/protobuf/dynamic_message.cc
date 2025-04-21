@@ -530,11 +530,20 @@ void DynamicMessage::SharedCtor(bool lock_factory) {
           case FieldDescriptor::CppStringType::kView:
             if (internal::EnableExperimentalMicroString() &&
                 !field->is_repeated()) {
-              auto* str = ::new (MutableRaw<MicroString>(i)) MicroString();
-              if (field->has_default_value()) {
-                // TODO: Use an unowned block instead.
-                str->Set(field->default_value_string(), arena);
-              }
+              const auto get_prototype = [&] {
+                return const_cast<DynamicMessage*>(
+                    static_cast<const DynamicMessage*>(
+                        type_info_->class_data.prototype));
+              };
+              *MutableRaw<MicroString>(i) =
+                  is_prototype()
+                      // Make a new object, potentially creating the default.
+                      ? MicroString::MakeDefaultValuePrototype(
+                            field->default_value_string())
+                      // Copy from the prototype.
+                      : MicroString(
+                            arena,
+                            *get_prototype()->MutableRaw<MicroString>(i));
               break;
             }
             [[fallthrough]];
@@ -626,7 +635,12 @@ DynamicMessage::~DynamicMessage() {
               break;
             case FieldDescriptor::CppStringType::kView:
               if (internal::EnableExperimentalMicroString()) {
-                reinterpret_cast<MicroString*>(field_ptr)->Destroy();
+                if (is_prototype()) {
+                  reinterpret_cast<MicroString*>(field_ptr)
+                      ->DestroyDefaultValuePrototype();
+                } else {
+                  reinterpret_cast<MicroString*>(field_ptr)->Destroy();
+                }
                 break;
               }
               [[fallthrough]];
@@ -692,7 +706,12 @@ DynamicMessage::~DynamicMessage() {
           break;
         case FieldDescriptor::CppStringType::kView:
           if (internal::EnableExperimentalMicroString()) {
-            MutableRaw<MicroString>(i)->Destroy();
+            if (is_prototype()) {
+              reinterpret_cast<MicroString*>(field_ptr)
+                  ->DestroyDefaultValuePrototype();
+            } else {
+              MutableRaw<MicroString>(i)->Destroy();
+            }
             break;
           }
           [[fallthrough]];
