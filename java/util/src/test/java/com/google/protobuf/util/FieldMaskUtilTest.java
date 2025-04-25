@@ -12,6 +12,7 @@ import static com.google.common.truth.Truth.assertWithMessage;
 
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.FieldMask;
+import com.google.protobuf.util.FieldMaskUtil.TrimOptions;
 import proto2_unittest.UnittestProto.NestedTestAllTypes;
 import proto2_unittest.UnittestProto.TestAllTypes;
 import org.junit.Test;
@@ -278,9 +279,82 @@ public class FieldMaskUtilTest {
             .build();
     FieldMask mask =
         FieldMaskUtil.fromStringList(
-            ImmutableList.of("payload.optional_int32", "payload.optional_string"));
+            ImmutableList.of(
+                "payload.optional_int32",
+                "payload.optional_string",
+                "payload.optional_int64", // Primitive field not set in source.
+                "child", // Message field not set in source.
+                "child.optional_int32" // Primitive field in an unset message field in source.
+                ));
 
     NestedTestAllTypes actual = FieldMaskUtil.trim(mask, source);
+
+    assertThat(actual)
+        .isEqualTo(
+            NestedTestAllTypes.newBuilder()
+                .setPayload(
+                    TestAllTypes.newBuilder()
+                        .setOptionalInt32(1234)
+                        .setOptionalInt64(0) // Default value set for primitive field.
+                        .setOptionalString("1234"))
+                .build());
+  }
+
+  @Test
+  public void testTrimWithTrimOptions_default() throws Exception {
+    NestedTestAllTypes source =
+        NestedTestAllTypes.newBuilder()
+            .setPayload(
+                TestAllTypes.newBuilder()
+                    .setOptionalInt32(1234)
+                    .setOptionalString("1234")
+                    .setOptionalBool(true))
+            .build();
+    FieldMask mask =
+        FieldMaskUtil.fromStringList(
+            ImmutableList.of(
+                "payload.optional_int32",
+                "payload.optional_string",
+                "payload.optional_int64", // Primitive field not set in source.
+                "child", // Message field not set in source.
+                "child.optional_int32" // Primitive field in an unset message field in source.
+                ));
+
+    NestedTestAllTypes actual = FieldMaskUtil.trim(mask, source, new TrimOptions());
+
+    assertThat(actual)
+        .isEqualTo(
+            NestedTestAllTypes.newBuilder()
+                .setPayload(
+                    TestAllTypes.newBuilder()
+                        .setOptionalInt32(1234)
+                        .setOptionalInt64(0) // Default value set for primitive field.
+                        .setOptionalString("1234"))
+                .build());
+  }
+
+  @Test
+  public void testTrimWithTrimOptions_retainPrimitiveFieldUnsetState() throws Exception {
+    NestedTestAllTypes source =
+        NestedTestAllTypes.newBuilder()
+            .setPayload(
+                TestAllTypes.newBuilder()
+                    .setOptionalInt32(1234)
+                    .setOptionalString("1234")
+                    .setOptionalBool(true))
+            .build();
+    FieldMask mask =
+        FieldMaskUtil.fromStringList(
+            ImmutableList.of(
+                "payload.optional_int32",
+                "payload.optional_string",
+                "payload.optional_int64", // Primitive field not set in source.
+                "child", // Message field not set in source.
+                "child.optional_int32" // Primitive field in an unset message field in source.
+                ));
+
+    NestedTestAllTypes actual =
+        FieldMaskUtil.trim(mask, source, new TrimOptions().setRetainPrimitiveFieldUnsetState(true));
 
     assertThat(actual)
         .isEqualTo(
